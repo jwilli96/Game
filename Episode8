@@ -1,0 +1,215 @@
+Display.java
+package com.game.gamefront;
+
+import java.awt.Canvas;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.image.BufferStrategy;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
+
+import javax.swing.JFrame;
+
+import com.game.gamefront.graphics.Render;
+import com.game.gamefront.graphics.Screen;
+
+public class Display extends Canvas implements Runnable {
+
+	private static final long serialVersionUID = 1L;
+
+	public static final int WIDTH = 1280;
+	public static final int HEIGHT = 720;
+	public static final String TITLE = "Game Title";
+
+	private Thread thread;
+	private Screen screen;
+	private Game game;
+	private BufferedImage img;
+	private boolean running = false;
+	private int[] pixels;
+	
+	public Display() {
+		//Allows to put width and height into 1 object
+		Dimension size = new Dimension(WIDTH, HEIGHT);
+		setPreferredSize(size);
+		setMinimumSize(size);
+		setMaximumSize(size);
+		screen = new Screen(WIDTH, HEIGHT);
+		game = new Game();
+		img = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+		pixels = ((DataBufferInt)img.getRaster().getDataBuffer()).getData();
+	}
+
+	private void start() {
+		if (running) {
+			return;
+		}
+		running = true;
+		thread = new Thread(this);
+		thread.start();
+
+	}
+	private void stop() {
+		if (!running){
+			return;
+		}
+		running = false;
+		try {
+			thread.join();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+			System.exit(0);
+		}
+	}
+	public void run() {
+		int frames = 0;
+		double unprocessedSeconds = 0;
+		long previousTime = System.nanoTime();
+		double secondsPerTick = 1 / 60.0;
+		int tickCount = 0;
+		boolean ticked = false;
+		
+		while (running) {
+			long currentTime = System.nanoTime();
+			long passedTime = currentTime - previousTime;
+			previousTime = currentTime;
+			unprocessedSeconds += passedTime / 1000000000.0;
+			
+			while (unprocessedSeconds > secondsPerTick) {
+				tick();
+				unprocessedSeconds -= secondsPerTick;
+				ticked = true;
+				tickCount++;
+				if (tickCount % 60 == 0) {
+					System.out.println(frames + "fps");
+					previousTime += 1000;
+					frames = 0;
+				}
+			}
+			if (ticked) {
+				render();
+				frames++;
+			}
+			render();
+			frames++;
+		}
+	}
+	
+	private void tick() {
+		game.tick();
+	}
+	private void render() {
+		BufferStrategy bs = this.getBufferStrategy();
+		if (bs == null) {
+			createBufferStrategy(3);
+			return;
+		}
+		screen.render(game);
+		
+		for (int i = 0; i < WIDTH * HEIGHT; i++) {
+			pixels[i] = screen.pixels[i];
+		}
+		Graphics g = bs.getDrawGraphics();
+		g.drawImage(img, 0, 0, WIDTH, HEIGHT, null);
+		g.dispose();
+		bs.show();
+		
+	}
+	public static void main(String[] args) {
+		Display game = new Display();
+		JFrame frame = new JFrame();
+
+		frame.add(game);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setSize(WIDTH, HEIGHT);
+		frame.setLocationRelativeTo(null);
+		frame.setResizable(true);
+		frame.setVisible(true);
+		frame.setTitle(TITLE);
+		
+		game.start();
+	}
+
+}
+Render.java
+package com.game.gamefront.graphics;
+
+public class Render {
+	public final int width;
+	public final int height;
+	public final int[] pixels;
+
+	public Render(int width, int height) {
+		this.width = width;
+		this.height = height;
+		pixels = new int[width * height];
+	}
+
+	public void draw(Render render, int xOffset, int yOffset) {
+		for (int y = 0; y < render.height; y++) {
+			int yPix = y + yOffset;
+			if (yPix < 0 || yPix >= height)
+				continue;
+			for (int x = 0; x < render.width; x++) {
+				int xPix = x + xOffset;
+				if (xPix < 0 || xPix >= width)
+					continue;
+
+				int alpha = render.pixels[x + y * render.width];
+				//This allows us to generate pixels without any data
+				if (alpha > 0) {
+					pixels[xPix + yPix * width] = alpha;
+				}
+
+			}
+		}
+	}
+
+}
+Screen.java
+package com.game.gamefront.graphics;
+
+import java.util.Random;
+
+import com.game.gamefront.Game;
+
+public class Screen extends Render{
+	
+	private Render test;
+
+	public Screen(int width, int height) {
+		super(width, height);
+		Random random = new Random();
+		test = new Render(256, 256);
+		for (int i = 0; i < 256*256; i++) {
+			test.pixels[i] = random.nextInt();
+		}
+		
+	}
+	public void render(Game game) {
+		for (int i = 0; i < width * height; i++) {
+			pixels[i] = 0;
+		}
+		for (int i = 0; i < 50; i++) {
+			int anim = (int) (Math.sin((game.time + i * 2) % 1000.0 / 100) * 100);
+			int anim1 = (int) (Math.cos((game.time + i * 2) % 1000.0 / 100) * 100);
+			
+		    int xOffset = (width - test.width) / 2 + anim;
+		    int yOffset = (height - test.height) / 2 + anim1;
+		    draw(test, xOffset, yOffset);
+		}
+		
+	}
+
+}
+Game.java
+package com.game.gamefront;
+
+public class Game {
+	public int time;
+	
+	public void tick() {
+		time+=3;
+	}
+
+}
